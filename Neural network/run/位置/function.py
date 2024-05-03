@@ -143,7 +143,7 @@ class SpecialBlock(nn.Module):
         return F.relu(x, inplace=True)
 
 
-class Small(nn.Module):
+class Small_8(nn.Module):
     def __init__(self):
         super(Small, self).__init__()
         self.prepare = nn.Sequential(
@@ -181,6 +181,44 @@ class Small(nn.Module):
 
         return x
 
+class Small(nn.Module):
+    def __init__(self):
+        super(Small, self).__init__()
+        self.prepare = nn.Sequential(
+            nn.Conv2d(3, 64, 7, 2, 3),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(3, 2, 1)
+        )
+        self.layer1 = nn.Sequential(
+            CommonBlock(64, 64, 1),
+            CommonBlock(64, 64, 1)
+        )
+        self.layer2 = nn.Sequential(
+            SpecialBlock(64, 128, [2, 1]),
+            CommonBlock(128, 128, 1)
+        )
+        self.pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.fc = nn.Sequential(
+            nn.Dropout(p=0.5),
+            nn.Linear(128, 64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(64, 4)  #分类数在这改
+        )
+
+    def forward(self, x):
+        x = self.prepare(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+
+        x = self.pool(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.fc(x)
+
+        return x
+    
 def model_save(model,path):
     """
     介绍：保存模型为权重文件 \n
@@ -361,16 +399,33 @@ def run(img,model_position):
             model_position:所用模型的地址 \n
     传出变量： \n
             num:验证结果 \n
-                0:上牙下侧 \n
-                1:下牙内侧 \n
-                2:下牙上侧 \n 
-                3:右上牙 \n 
-                4:右下牙 \n
-                5:正面门牙 \n 
-                6:左上牙 \n 
-                7:左下牙 \n
+                0:无口腔 \n
+                1:down下牙上侧 \n
+                2:front \n 
+                3:up \n 
     """ 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     let=Small().to(device)
     model_load(let,model_position)
     return testimg(img,let)
+
+def list_run(img_list,model_position):
+    """
+    介绍：输出针对图像列表的模型的识别结果，可以加快图像列表的识别效率 \n
+    传入变量: \n
+            img_list:需识别的图片列表 \n
+            model_position:所用模型的地址 \n
+    传出变量： \n
+            num:验证结果 \n
+                0:无口腔 \n
+                1:down \n
+                2:front \n 
+                3:up \n 
+    """ 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    let=Small().to(device)
+    model_load(let,model_position)
+    result_list=[]
+    for img in img_list:
+        result_list.append(testimg(img,let))
+    return result_list
