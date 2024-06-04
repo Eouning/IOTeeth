@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import sys
 from matplotlib import pyplot as plt
 import os, random, shutil
 import torch
@@ -12,7 +11,6 @@ from torchvision import datasets
 from torch.autograd import Variable
 import torchvision
 from torchvision.transforms import transforms
-from visdom import Visdom
 from torch.utils.data import Dataset, DataLoader, TensorDataset,ConcatDataset
 
 def Make_loader(data_train,data_label,batch_size=200, shuffle=False):
@@ -192,6 +190,44 @@ class ResNet34(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+
+        x = self.pool(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.fc(x)
+
+        return x
+
+class Small(nn.Module):
+    def __init__(self):
+        super(Small, self).__init__()
+        self.prepare = nn.Sequential(
+            nn.Conv2d(3, 64, 7, 2, 3),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(3, 2, 1)
+        )
+        self.layer1 = nn.Sequential(
+            CommonBlock(64, 64, 1),
+            CommonBlock(64, 64, 1)
+        )
+        self.layer2 = nn.Sequential(
+            SpecialBlock(64, 128, [2, 1]),
+            CommonBlock(128, 128, 1)
+        )
+        self.pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.fc = nn.Sequential(
+            nn.Dropout(p=0.5),
+            nn.Linear(128, 64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(64, 4)  #分类数在这改
+        )
+
+    def forward(self, x):
+        x = self.prepare(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
 
         x = self.pool(x)
         x = x.reshape(x.shape[0], -1)

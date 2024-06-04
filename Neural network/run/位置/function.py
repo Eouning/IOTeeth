@@ -14,6 +14,7 @@ import torchvision
 from torchvision.transforms import transforms
 from visdom import Visdom
 from torch.utils.data import Dataset, DataLoader, TensorDataset,ConcatDataset
+import statistics
 
 def Make_loader(data_train,data_label,batch_size=200, shuffle=False):
     """
@@ -391,41 +392,81 @@ def testimg(img,model):
     num=int(logits.data.max(1)[1].tolist()[0])
     return num
 
-def run(img,model_position):
+def run0(img,model_position):
     """
-    介绍：输出模型的识别结果 \n
+    介绍：输出图片的权重识别结果 \n
     传入变量: \n
             img:需识别的图片 \n
             model_position:所用模型的地址 \n
     传出变量： \n
+            logits:输出权重,最大数值的位置会被认为是输出的结果
+    """ 
+    Resize_num=128
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    transf = torchvision.transforms.ToTensor()  # 实例化类
+    img_list=[]
+    im=cv2.resize(img,(Resize_num, Resize_num), interpolation = cv2.INTER_CUBIC)
+    img_list.append(transf(im))
+    data=torch.stack(img_list)
+    data=data.to(torch.float32)
+
+    let=Small().to(device)
+    model_load(let,model_position)
+
+    with torch.no_grad():
+        logits=let(data.to(device))
+    
+    #print("logits:",logits)
+    return logits.tolist()[0]
+
+def run(img,model_position,repetition=20):
+    """
+    介绍：输出图片的识别结果 \n
+    传入变量: \n
+            img:需识别的图片 \n
+            model_position:所用模型的地址 \n
+            repetition：重复识别次数，针对因图片缩放产生的识别结果的偶然性进行缩减\n
+                        默认值为20。值越大效果越好但速度越慢。\n
+    传出变量： \n
             num:验证结果 \n
                 0:无口腔 \n
-                1:down下牙上侧 \n
-                2:front \n 
-                3:up \n 
+                1:down 下牙上侧 \n
+                2:front 牙正面\n 
+                3:up 上牙下侧\n 
     """ 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     let=Small().to(device)
     model_load(let,model_position)
-    return testimg(img,let)
+    result_list=[]
+    for x in range(repetition):
+        result_list.append(testimg(img,let))
 
-def list_run(img_list,model_position):
+    mode_result = statistics.mode(result_list)
+    return mode_result
+
+def list_run(img_list,model_position,repetition=20):
     """
     介绍：输出针对图像列表的模型的识别结果，可以加快图像列表的识别效率 \n
     传入变量: \n
             img_list:需识别的图片列表 \n
             model_position:所用模型的地址 \n
+            repetition：重复识别次数，针对因图片缩放产生的识别结果的偶然性进行缩减\n
+                        默认值为20。值越大效果越好但速度越慢。\n
     传出变量： \n
             num:验证结果 \n
                 0:无口腔 \n
-                1:down \n
-                2:front \n 
-                3:up \n 
+                1:down 下牙上侧 \n
+                2:front 牙正面\n 
+                3:up 上牙下侧\n 
     """ 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     let=Small().to(device)
     model_load(let,model_position)
     result_list=[]
     for img in img_list:
-        result_list.append(testimg(img,let))
+        rl=[]
+        for x in range(repetition):
+            rl.append(testimg(img,let))
+        result_list.append(statistics.mode(rl))
     return result_list
